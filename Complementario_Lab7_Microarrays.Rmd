@@ -1,0 +1,249 @@
+---
+title: "R Lab7. Análisis de datos de microarrays con R. Material complementario"
+subtitle: "Bioinformática. Ingeniería Biomédica"
+output: html_document
+address: Departamento de Estadística e I.O. Universidad de Valladolid
+---
+
+Los microarrays son una de las herramientas más populares para comprender los fenómenos biológicos mediante mediciones a gran escala de muestras biológicas, normalmente DNA, RNA o proteínas. Esta técnica se ha utilizado para una gran variedad de objetivos, que van desde obtener el perfil de expresión génica hasta la identificación de SNP u otros biomarcadores, o para comprender las relaciones entre los genes y sus funciones biológicas. 
+
+Existen diferentes tecnologías de microarray, Affymetrix, Illumina, etc. En este laboratorio nos centramos en los microarrays de expresión de Affymetrix. La mayoría de los métodos utilizados se pueden utilizar en otras plataformas con pequeñas modificaciones.
+
+
+# Obteniendo los datos de repositorios públicos
+
+Fundamentalmente existen dos repositorios para obtener datos de experimentos llevados a cabo con microarrays: [GEO](https://www.ncbi.nlm.nih.gov/geo/) y [ArrayExpress](https://www.ebi.ac.uk/arrayexpress/).  
+
+En este laboratorio vamos a trabajar con GEO, concretamente con el conjunto de datos con identificador GSE24460 (https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GSE24460), cuyo objetivo fue medir la resistencia a un fármaco quimioterápico y que contiene la expresión de 22277 genes en cuatro muestras (arrays), dos de cada tipo: casos y controles. La plataforma utilizada fue Affymetrix Human Genome U133A 2.0 Array. 
+
+Obtenemos los ficheros .CEL del enlace correspondiente en el archivo `GSE24460_RAW.tar` que también tenéis disponible en el campus. Se obtienen compridos y hay que descomprimirlos.
+
+Leemos directamente los archivos .CEL utilizando la función `ReadAffy()` del paquete `affy` disponible en Bioconductor. Le debéis pasar como argumento la ruta del directorio donde tenéis almacenados estos ficheros .CEL. Un argumento interesante de esta función es `compress=TRUE` que podeis utilizar cuando los ficheros .CEL estén comprimidos.
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+if(!("affy" %in% installed.packages()))
+  BiocManager::install("affy")
+library("affy")
+
+myData <- ReadAffy(celfile.path="GSE24460_RAW/")
+myData
+```
+El resultado es un objeto de la clase `AffyBatch` que contiene la información sobre la expresión a nivel de *probe*.
+
+# Manejando el objeto `AffyBatch`: Análisis de Bajo Nivel
+
+Partimos del objeto `myData` de la clase `AffyBatch` que contiene la información a nivel de probe de los cuatro arrays. 
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+sampleNames(myData)
+```
+Podemos obtener distinta información de este objeto como por ejemplo:
+
+- la estructura, con el método `str()`, 
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+str(myData)
+```
+- la información fenotípica, con los métodos `pData()` o `phenoData()`,
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+pData(myData)
+phenoData(myData)
+```
+
+- la expresión, con `exprs()`,
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+head(exprs(myData),n=3)
+```
+- la plataforma, con `annotation()`, 
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+annotation(myData)
+```
+
+- los nombres de las probes con `probeNames()`, o de las muestras/arrays con `sampleNames()`,
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+head(probeNames(myData),n=20)
+sampleNames(myData)
+```
+
+Notad que los nombres de las *probes* en realidad son nombres de *probesets* que se repiten en cada *probe* perteneciente al *probeset* correspondiente. Tanto el nombre de las *probes* como de las muestras son vectores de caracteres que podemos modificar con funciones genéricas de R. Por ejemplo, para eliminar la extensión '.CEL' de los nombres de muesra podemos utilizar la función `gsub()`.
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+sampleNames(myData)<-gsub(".CEL","",sampleNames(myData))
+```
+
+
+## Evaluar la calidad de los datos
+
+La calidad de los datos puede verse afectada por muchos factores tales como fluorescencia desigual en el array que se traducirá en distribuciones de intensidad variable; hibridaciones no específicas que podrían traducirse en la presencia de mucho ruido de fondo; o diseños experimentales inapropiados que pueden afectar a todo el conjunto de datos. Utilizar datos de mala calidad dará lugar a inferencias sesgadas y/o no concluyentes durante el análisis. Por lo tanto, es muy importante poder garantizar la calidad de los datos antes de comenzar un análisis de alto nivel. Vamos a ver algunos análisis y representaciones que podemos usar para evaluar esta calidad de los datos.
+
+Un paquete que puede servir para este propósito es `arrayQualityMetrics`.
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+if(!("arrayQualityMetrics" %in% installed.packages()))
+  BiocManager::install("arrayQualityMetrics")
+library("arrayQualityMetrics")
+```
+
+La función `arrayQualityMetrics()` crea diferentes gráficos para determinar la calidad de los datos, almacenándoles en la carpeta cuyo nombre, que le pasamos como segundo argumento, se crea en el directorio de trabajo en el que estemos.
+
+```{r, eval = FALSE, message=FALSE, warning=FALSE}
+arrayQualityMetrics(myData, outdir="quality_assesment")
+```
+
+Se crea un informe completo en formato 'html' al que podéis acceder a través del archivo `index.html` o utilizando la instrucción: 
+
+```{r, eval = FALSE, message=FALSE, warning=FALSE}
+browseURL(file.path("quality_assesment", "index.html"))
+```
+
+Este informe incluye medidas de distancias entre arrays, análisis de componentes principales, plots de densidad, MA plots y plots de degradación de RNA. También podemos conseguirlos individualmente.
+
+### MA Plots
+
+Utilizamos la función `MAplot()`,
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+MAplot(myData, pairs=TRUE, plot.method="smoothScatter")
+```
+
+Se comparan las intensidades de cada par de arrays con el argumento `pairs=TRUE`. Si este argumento es `FALSE` se comparará con un array de referencia calculado como el array mediano. $A$ representa la intensidad media (en escala log2), mientras que $M$ representa la diferencia de log2 intensidades, de forma que la forma de la nube de puntos nos da una idea de si existe algún patrón en la diferencia de intensidades que dependa de la intensidad. Todos las intensidades deberían observadas alrededor de la recta $M=0$, sin un patrón diferente para valores altos o bajos de intensidad. Para ayudarnos a identificar patrones se ajusta un modelo suavizado con el parámetro `plot.method = "smoothScatter"`, que se representa en rojo.
+
+Desviaciones de $M=0$ pueden representar sesgos, outliers o genes diferencialmente expresados. Estas desviaciones se corregirán en la fase de normalización, por lo que es habitual construir estos gráficos tras el preprocesado.
+
+
+### Gráficos de densidades
+
+Utilizamos la función `plotDensity.AffyBatch()` para representar la densidad (en escala log2) de las intensidades.
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+plotDensity.AffyBatch(myData)
+```
+
+Las distribuciones deberían ser similares en cuanto a su forma y rango entre todos los arrays. Arrays con mucho ruido de fondo estarán desplazadas a la derecha. Si la distribución tiene una cola derecha corta indicará pérdida de señal, mientras que si pasa a la derecha puede indicar saturación. Formas multimodales se pueden corresponder con artefactos en las imágenes de fluorescencia.
+
+
+### Box plots
+
+Utilizamos la función `boxplot()`.
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+boxplot(myData)
+```
+
+En datos de alta calidad observaremos cajas y bigotes similares en todos los arrays, representando distribuciones similares en la log2 intensidad de cada uno de ellos. Desviaciones importantes podrían representar un ruido experimental en ese array en particular. La normalización puede mejorar este aspecto de la calidad de los datos. 
+
+### Gráficos de degradación de RNA
+
+Para obtener este plot utilizamos la función `AffyRNAdeg()` sobre el objeto `AffyBatch` y posteriormente, sobre la lista resultado, la función `plotAffyRNAdeg()`.
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+rnaDeg <- AffyRNAdeg(myData)
+plotAffyRNAdeg(rnaDeg)
+```
+
+El gráfico de degradación del RNA nos da información de la calidad de la hibridación por array. Sabemos que el RNAm tienen una vida útil específica, tras la cual se degrada, dejando de ser efectivo para medir los niveles de expresión. La degradación comienza en el extremo 5' moviéndose hacia el extremo 3'. Por lo tanto, como efecto de esta degradación, la intensidad debería ser menor en el extremo 5' que en el extremo 3'. En el gráfico, las sondas se ordenan secuencuencialmente desde el extremo 5' hasta el extremo 3', y se representa la intensidad que debería mostrar una tendencia creciente y más o menos constante. Desviaciones de este patrón pueden indicar problemas con la muestra utilizada para la hibridación.
+
+Podemos ver los detalles del objeto `rnaDeg` utilizando el método `summaryAffyRNAdeg()`. Se muestran las pendientes (`slope`) junto con un p-valor. Las pendientes deberían ser positivas y significativas. 
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+summaryAffyRNAdeg(rnaDeg)
+```
+
+## Pre-procesado
+
+Podemos utilizar la función `mas5()` del paquete `affy` para convertir el objeto de la clase `AffyBatch` en un objeto `ExpressionSet`. Esta función implementa el **método MAS5** como método de preprocesado de los datos a nivel de *probe*. 
+
+Los objetos de la clase `ExpressionSet` contienen la información sobre las intensidades de expresión a nivel de *probeset*, datos fenotípicos, información sobre el experimento e información sobre la anotación de los genes. Son el punto de partida de un análisis de alto nivel. 
+
+`mas5()` implementa el método de pre-procesado desarrollado por Affymetrix.
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+eset.mas5 <- mas5(myData)
+eset.mas5
+```
+
+El objeto `eset` contiene los valores de expresión normalizados y sumarizados a nivel de *probeset*. Para obtener la matriz de expresión utilizamos el método `exprs()`. Los nombres de la filas de esta matriz se corresponden con los nombres de las probesets y los nombres de las columnas con los de las muestras.
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+head(exprs(eset.mas5),n=3)
+head(rownames(exprs(eset.mas5)),n=10)
+```
+
+Los datos son de intensidad no de log-intesidad.
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+exprSet.mas5 <- log(exprs(eset.mas5), 2)
+```
+  
+
+
+El **método RMA** está implementado en la función `rma()`.
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+eset.rma <- rma(myData)
+```
+En este caso, los niveles de expresión están ya log2 transformados.
+
+
+### Obtener objetos `ExpressionSet` de GEO
+
+Podríamos obtener un *dataset* directamente del repositorio GEO, utilizando la función `getGEO()` del paquete `GEOquery` disponible en Bioconductor, pasándole como argumento el identificador del dataset como `string`. Debemos poner el argumento `AnnotGPL = TRUE` para flexibilizar la información sobre las anotaciones de los genes. 
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+if(!("GEOquery" %in% installed.packages()))
+  BiocManager::install("GEOquery")
+library("GEOquery")
+
+geo <- getGEO("GSE24460", AnnotGPL = TRUE)
+```
+
+El objeto `geo` que hemos leído directamente del repositorio es una lista. Estamos interesados en el primer elemento de esas lista que es un objeto de la clase `ExpressionSet` y no `AffyBatch`, puesto que los datos ya se han pre-procesado.
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+geo <- geo[[1]]
+class(geo)
+```
+
+También es posible obtener datos de ArrayExpress a partir de la función `ArrayExpress()` del paquete `ArrayExpress` disponible en Bioconductor. 
+
+
+### Normalización de los datos
+
+La etapa de normalización es fundamental en el análisis de datos de microarrays, ya que pequeñas diferencias en las cantidades de RNA y/o algún error experimental pude hacer que observemos diferencias importantes entre diferentes muestras/arrays que no se deban a los efectos que estamos estudiando. Necesitamos normalizar para hacer que la información de diferentes arrays sean comparables. 
+
+En el paquete `affy` hay muchos métodos de normalización disponibles. Podeís consultarlos con la función `normalize.AffyBatch.methods()`.
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+normalize.AffyBatch.methods()
+```
+
+De todos ellos vamos a destacar dos:
+
+- La normalización **loess** que utiliza un modelo de regresión con pesos para normalizar. Usamos la función `normalize.AffyBatch.loess()`. Este método ajusta una curva suavizada a cada par de arrays que se pasan en forma de objeto de la clase `AffyBatch`. El grado de suavidad se determina con el parámetro `span`. Valores mayores resultan en curvas más suaves. Su valor por defecto es $2/3$. Esta función utiliza la función `loess()` genérica de R para hacer el suavizado. 
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+myData.loess <- normalize.AffyBatch.loess(myData)
+boxplot(myData.loess,cex.axis=0.7)
+```
+
+
+- La normalización por cuantiles la conseguimos con la función `normalize.AffyBatch.quantiles(myData)`,
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+myData.quantile <- normalize.AffyBatch.quantiles(myData)
+```
+
+Para ver el efecto de la normalización construimos boxplots antes y después de dichas normalizaciones,
+
+```{r, eval = TRUE, message=FALSE, warning=FALSE}
+par(mfrow=c(2,2))
+boxplot(myData, main="Non-normalized data",cex.axis=0.4)
+boxplot(myData.loess, main="Loess Normalization",cex.axis=0.4)
+boxplot(myData, main="Non-normalized data",cex.axis=0.4)
+boxplot(myData.quantile, main="Quantile Normalization",cex.axis=0.4)
+```
+
+
