@@ -143,6 +143,53 @@ The course covers the main computational tools used in modern bioinformatics, al
 
 ---
 
+## Exam · Final Assessment (Ordinary Call — June 2025)
+
+End-of-course practical exam integrating the full bioinformatics pipeline across three independent exercises.
+
+---
+
+### Exercise 1 · RNA-Seq Analysis — Diabetic Retinopathy (4 pts)
+**Context:** Gene expression study in post-mortem human retina tissue (35 donors) across four clinical groups:
+Control, Diabetic (no signs), NPDR and PDR. RNA-Seq count data + phenotypic variables (sex, age, disease group).
+
+- Exploratory analysis of `rawCount` and `phenoData`: gene count, sample distribution across clinical groups,
+  identification of genes expressed in at least one sample.
+- TMM normalisation with `edgeR`; pre/post-normalisation boxplot comparison; justification of the transformation.
+- Differential expression analysis (With_DR vs. No_DR) adjusting for sex effect using a GLM design matrix.
+- p-value histogram interpretation (b1); FDR control at 0.1 with BH correction and discussion of expected
+  results given histogram shape (b2).
+- Volcano plot construction; gene counting at FDR < 0.1 and |logFC| > 2.
+
+---
+
+### Exercise 2 · Random Forest + k-Means — Retinopathy Classification (3 pts)
+**Context:** Binary classification (Diabetes vs. NPDR) from expression of 50 randomly selected genes
+(`set.seed(13549)`).
+
+- Construction of a log-transformed count data frame (one row per sample, one column per gene + class label).
+- Random Forest model trained on the full dataset; OOB error interpretation; discussion of train-as-test
+  validation strategy and its limitations.
+- Variable importance analysis: identification of the most informative genes for NPDR prediction using
+  `varImpPlot()`.
+- Optimal cluster number determination with `fviz_nbclust()` (k-means); clustering of expression samples;
+  graphical representation and biological interpretation in relation to diabetic retinopathy status.
+
+---
+
+### Exercise 3 · Pairwise Protein Alignment — Gap Penalty Sensitivity (3 pts)
+**Sequences:** Two human protein fragments — seq1 (GSAQVKGHGKKVADALTNAVAHVDDMPNALSALSDLHAHKL)
+and seq2 (GNPKVKAHGKKVLGAFSDGTFATLSELHCDKL).
+
+- Global alignment with PAM30 substitution matrix; gap open = −4, gap extend = −2; score and alignment
+  reporting.
+- Repeat with stricter penalties (gap open = −20, gap extend = −5); comparison of both alignments and
+  explanation of structural differences introduced by penalty magnitude.
+- Statistical significance assessment of both alignments via multinomial randomisation model
+  (1000 random sequences, empirical p-value estimation).
+
+---
+
 ## Skills demonstrated
 
 | Area | Tools / Methods |
